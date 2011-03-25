@@ -1,0 +1,20 @@
+var x;
+
+function main ()
+{
+    function foo()
+    {
+        function bar()
+        {
+            function baz()
+            {
+                x = x + 1;
+                x = x + 2;
+                x = x + 3;
+            }
+            baz();
+        }
+        bar();
+    }
+    foo();
+}
