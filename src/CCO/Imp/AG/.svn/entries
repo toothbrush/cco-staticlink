@@ -1,0 +1,40 @@
+8
+
+dir
+3
+https://subversion.cs.uu.nl/repos/staff.atze.cco/projects/dist/imp/src/CCO/Imp/AG
+https://subversion.cs.uu.nl/repos/staff.atze.cco
+
+
+
+2009-11-06T09:38:02.601286Z
+1
+atze
+
+
+svn:special svn:externals svn:needs-lock
+
+Base.ag
+file
+
+
+
+
+2009-06-18T06:15:25.000000Z
+c7b7e5b277671af249e22778695e9971
+2009-11-06T09:38:02.601286Z
+1
+atze
+
+CodeGeneration.ag
+file
+
+
+
+
+2009-06-18T06:15:25.000000Z
+64fd6e0cb423d27d995590f21b711af5
+2009-11-06T09:38:02.601286Z
+1
+atze
+

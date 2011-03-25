@@ -1,0 +1,224 @@
+imports
+{
+import CCO.Ssm hiding (Add, Sub, Mul, Div, Eq, Lt, Gt)
+import Prelude hiding (div)
+}
+
+-------------------------------------------------------------------------------
+-- Labels
+-------------------------------------------------------------------------------
+
+-- Handing out fresh program-point labels where necessary.
+
+attr Decl Decls Stmt Stmts Exp Exps
+  inh labels :: {[Label]}
+  syn labels :: {[Label]}
+
+sem Prog | TopLevelDecls  ds .labels = [0 ..]
+
+sem Decl | FunDecl        loc.beginLabel = @lhs.labels !! 0
+                          loc.endLabel   = @lhs.labels !! 1
+                          b  .labels     = drop 2 @lhs.labels
+
+sem Stmt | If             loc.elseLabel  = @lhs.labels !! 0
+                          loc.fiLabel    = @lhs.labels !! 1
+                          e  .labels     = drop 2 @lhs.labels
+
+-------------------------------------------------------------------------------
+-- Offsets
+-------------------------------------------------------------------------------
+
+-- Calculating the mark-pointer relative offsets at which variables are to be
+-- allocated.
+
+attr Decl Decls Stmt Stmts
+  inh offset :: {Int}
+  syn offset :: {Int}
+
+sem Prog | TopLevelDecls    ds .offset = 1
+sem Decl | VarDecl          lhs.offset = @lhs.offset + 1
+         | FunDecl          b  .offset = 1
+sem Stmt | Block            lhs.offset = @lhs.offset
+
+-------------------------------------------------------------------------------
+-- Environments
+-------------------------------------------------------------------------------
+
+{
+-- | An environment maps identifiers to symbol descriptors.
+type Env = [(Ident, Sym)]
+
+-- | A symbol descriptor either describes a variable or a function symbol.
+-- For a variable, we store its offset relative to the mark pointer; for
+-- a function we store its begin label.
+data Sym = V Int | F Int
+
+-- | Restrict environments to a particular type of descriptor.
+vars   env = [entry | entry@(_, V _     ) <- env            ]
+funs   env = [entry | entry@(_, F _     ) <- env            ]
+params env = [entry | entry@(_, V offset) <- env, offset < 0]
+}
+
+-- For each block of statements or declarations, we construct a local
+-- environment.
+
+attr Decl Decls Stmt Stmts
+  syn env use {++} {[]} :: {Env}
+
+sem Decl | VarDecl  lhs.env = [(@x, V @lhs.offset    )]
+         | FunDecl  lhs.env = [(@f, F @loc.beginLabel)]
+
+sem Stmt | Block  lhs.env = []
+
+-- Furthermore, we construct a subenvironment for the parameters of a function.
+
+sem Decl | FunDecl
+  loc.params = zipWith (\x i -> (x, V i)) @xs [- (2 + length @xs) ..]
+
+-------------------------------------------------------------------------------
+-- Symbol tables
+-------------------------------------------------------------------------------
+
+{
+-- | A symbol table contains descriptors for each variable that is in scope at
+-- a certain program point.
+-- The table consists of levels of 'Env's reflecting the nesting of functions:
+-- * The head of the list of 'Env's corresponds to the innermost function scope
+--   and so it contains the descriptors of the symbols that are allocated
+--   relative to the current mark pointer.
+-- * To access the symbols described in the tail of the list, static links are
+--   to be followed.
+type Syms = [Env]
+}
+
+-- Symbol-table construction.
+
+attr Decl Decls Stmt Stmts Exp Exps
+  inh syms :: {Syms}
+
+sem Prog | TopLevelDecls  ds.syms = [@ds.env]
+sem Decl | FunDecl        b .syms = (@loc.params ++ @b.env) : @lhs.syms
+sem Stmt | Block          b .syms = let local : global = @lhs.syms
+                                    in  (local ++ @b.env) : global
+
+-------------------------------------------------------------------------------
+-- Code generation
+-------------------------------------------------------------------------------
+
+attr Decl Decls Stmt Stmts Exp Exps
+  syn codes use {.} {id} :: {CodeS}
+
+sem Prog | TopLevelDecls  loc.codes = @ds.codes .
+                                      enter @ds.env .
+                                      call "main" [@ds.env] .
+                                      ajs (- 1) .
+                                      exit @ds.env
+
+sem Decl | FunDecl  lhs.codes = bra @loc.endLabel .
+                                label @loc.beginLabel .
+                                  ldr MP .
+                                  ldrr MP SP .
+                                  enter @b.env .
+                                  @b.codes .
+                                  exit @b.env .
+                                  ldc 0 .
+                                  return_ (@loc.params : @lhs.syms) .
+                                label @loc.endLabel
+
+sem Stmt | Assign  lhs.codes = @e.codes . set @x @lhs.syms
+         | Call_   lhs.codes = @es.codes .
+                               call @f @lhs.syms .
+                               ajs (- 1)
+         | Print   lhs.codes = @e.codes . trap 0
+         | Return  lhs.codes = @e.codes . return_ @lhs.syms
+         | If      lhs.codes = @e.codes .
+                               brf @loc.elseLabel .
+                               @s1.codes .
+                               bra @loc.fiLabel .
+                               label @loc.elseLabel .
+                                 @s2.codes .
+                               label @loc.fiLabel
+         | Block   lhs.codes = enter @b.env .
+                               @b.codes .
+                               exit @b.env
+
+sem Exp | Int     lhs.codes = ldc @n
+        | False_  lhs.codes = ldc 0
+        | True_   lhs.codes = ldc 1
+        | Var     lhs.codes = get @x @lhs.syms
+        | Call    lhs.codes = @es.codes . call @f @lhs.syms
+        | Add     lhs.codes = @e1.codes . @e2.codes . add
+        | Sub     lhs.codes = @e1.codes . @e2.codes . sub
+        | Mul     lhs.codes = @e1.codes . @e2.codes . mul
+        | Div     lhs.codes = @e1.codes . @e2.codes . div
+        | Lt      lhs.codes = @e1.codes . @e2.codes . lt
+        | Eq      lhs.codes = @e1.codes . @e2.codes . eq
+        | Gt      lhs.codes = @e1.codes . @e2.codes . gt
+
+attr Prog
+  syn code :: {Code}
+
+sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
+
+-------------------------------------------------------------------------------
+-- Auxiliary code-generation functions
+-------------------------------------------------------------------------------
+
+{
+-- | Produces code for entering a block.
+enter :: Env -> CodeS
+enter env = foldr (.) id [ldc 0 | (_, V _) <- env]
+
+-- | Produces code for exiting a block.
+exit :: Env -> CodeS
+exit env = ajs (- length (vars env))
+
+-- | Produces code for retrieving the value of a variable.
+get :: Ident -> Syms -> CodeS
+get x (local : global) = case lookup x (vars local) of
+  Nothing         -> ldl (- 2) . getGlobal x global
+  Just (V offset) -> ldl offset
+
+-- | Produces code for retrieving the value of a global variable.
+getGlobal :: Ident -> Syms -> CodeS
+getGlobal x []           = error ("unknown variable: " ++ x)
+getGlobal x (env : envs) = case lookup x (vars env) of
+  Nothing         -> lda (- 2) . getGlobal x envs
+  Just (V offset) -> lda offset
+
+-- | Produces code for assigning a new value to a variable.
+set :: Ident -> Syms -> CodeS
+set x (local : global) = case lookup x (vars local) of
+  Nothing         -> ldl (- 2) . setGlobal x global
+  Just (V offset) -> stl offset
+
+-- | Produces code for assigning a new value to a global variable.
+setGlobal :: Ident -> Syms -> CodeS
+setGlobal x []           = error ("unknown variable: " ++ x)
+setGlobal x (env : envs) = case lookup x (vars env) of
+  Nothing         -> lda (- 2) . setGlobal x envs
+  Just (V offset) -> sta offset
+
+-- | Produces code for calling a function.
+call :: Ident -> Syms -> CodeS
+call f (local : global) = case lookup f (funs local) of
+  Nothing             -> ldl (- 2) . callGlobal f global
+  Just (F beginLabel) -> ldr MP . ldcL beginLabel . jsr
+
+-- | Produces code for calling a global function.
+callGlobal :: Ident -> Syms -> CodeS
+callGlobal f []           = error ("unknown function: " ++ f)
+callGlobal f (env : envs) = case lookup f (funs env) of
+  Nothing             -> lda (- 2) . callGlobal f envs
+  Just (F beginLabel) -> ldcL beginLabel . jsr
+
+-- | Produces code for returning from a function.
+return_ :: Syms -> CodeS
+return_ (local : _) =
+  sts (- (length (vars local) + 3)) .
+  ldrr SP MP .
+  str MP .
+  sts (- length (params local)) .
+  ajs (- (length (params local) - 1)) .
+  ret
+}

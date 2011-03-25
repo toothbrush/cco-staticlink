@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/staff.atze.cco/!svn/ver/2/projects/dist/imp/src/CCO/Imp
+END
+Base.hs
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/repos/staff.atze.cco/!svn/ver/1/projects/dist/imp/src/CCO/Imp/Base.hs
+END
+Parser.hs
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/repos/staff.atze.cco/!svn/ver/1/projects/dist/imp/src/CCO/Imp/Parser.hs
+END
+Lexer.hs
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/repos/staff.atze.cco/!svn/ver/1/projects/dist/imp/src/CCO/Imp/Lexer.hs
+END
+AG.ag
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/repos/staff.atze.cco/!svn/ver/1/projects/dist/imp/src/CCO/Imp/AG.ag
+END

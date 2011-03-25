@@ -1,0 +1,55 @@
+8
+
+dir
+3
+https://subversion.cs.uu.nl/repos/staff.atze.cco/projects/dist/imp/src/CCO
+https://subversion.cs.uu.nl/repos/staff.atze.cco
+
+
+
+2009-11-10T10:44:00.297886Z
+2
+atze
+
+
+svn:special svn:externals svn:needs-lock
+
+
+
+
+
+
+
+
+
+
+
+2251cca8-8c28-4336-ba35-b8313992d5d9
+
+Imp
+dir
+
+Ssm.hs
+file
+
+
+
+
+2009-06-18T06:15:25.000000Z
+3d164f6a18c94162071435e9f5bdf335
+2009-11-06T09:38:02.601286Z
+1
+atze
+
+Imp.hs
+file
+
+
+
+
+2009-06-18T06:15:25.000000Z
+f6efefbbe0a94fa5397a5451df5bde33
+2009-11-06T09:38:02.601286Z
+1
+atze
+

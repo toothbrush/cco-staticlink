@@ -1,0 +1,51 @@
+8
+
+dir
+0
+https://subversion.cs.uu.nl/repos/staff.atze.cco/projects/dist/imp/test
+https://subversion.cs.uu.nl/repos/staff.atze.cco
+add
+
+
+
+
+
+
+
+svn:special svn:externals svn:needs-lock
+
+t0
+file
+
+
+
+add
+
+t1
+file
+
+
+
+add
+
+t2
+file
+
+
+
+add
+
+t3
+file
+
+
+
+add
+
+t4
+file
+
+
+
+add
+
