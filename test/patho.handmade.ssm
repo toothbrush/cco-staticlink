@@ -1,0 +1,114 @@
+// Handmade version
+    bra L1
+L0:
+    ldr MP
+    ldrr MP SP
+    bra L3
+L2:
+    ldr MP
+    ldrr MP SP
+    bra L5
+L4:
+    ldr MP
+    ldrr MP SP
+    bra L7
+// baz
+L6:
+    ldr MP
+    ldrr MP SP
+
+    // caching.
+    ldl -2
+    lda -2
+    lda -2
+    lda -2
+    // now we have the address of x's context?
+
+
+    // grab cached variable address
+    ldl 1
+
+
+
+    lda 1
+    annote SP 0 0 green "x"
+    ldc 1
+    annote SP 0 0 green "1"
+    add
+    annote SP 0 0 green "x+1"
+    ldl 1
+    sta 1
+    ldl 1
+    lda 1
+    annote SP 0 0 green "x"
+    ldc 2
+    annote SP 0 0 green "2"
+    add
+    annote SP 0 0 green "x+2"
+    ldl 1
+    sta 1
+    ldl 1
+    lda 1
+    annote SP 0 0 green "x"
+    ldc 3
+    annote SP 0 0 green "3"
+    add
+    annote SP 0 0 green "x+3"
+    ldl 1
+    sta 1
+    ajs -1 // was 0; get rid of cached variables.
+    ldc 0
+    sts -3
+    ldrr SP MP
+    str MP
+    sts 0
+    ajs 1
+    ret
+L7:
+    ldr MP
+    ldc L6
+    jsr
+    ajs -1
+    ajs 0
+    ldc 0
+    sts -3
+    ldrr SP MP
+    str MP
+    sts 0
+    ajs 1
+    ret
+L5:
+    ldr MP
+    ldc L4
+    jsr
+    ajs -1
+    ajs 0
+    ldc 0
+    sts -3
+    ldrr SP MP
+    str MP
+    sts 0
+    ajs 1
+    ret
+L3:
+    ldr MP
+    ldc L2
+    jsr
+    ajs -1
+    ajs 0
+    ldc 0
+    sts -3
+    ldrr SP MP
+    str MP
+    sts 0
+    ajs 1
+    ret
+// main
+L1:
+    ldc 0
+    annote SP 0 0 green "x (var)"
+    ldr MP
+    ldc L0
+    jsr
+    ajs -1
+    ajs -1
