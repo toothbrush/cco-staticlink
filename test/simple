@@ -1,0 +1,8 @@
+var x;
+var y;
+function main() {
+	function foo() {
+        x = x+ 2;
+    }
+    foo();
+}
