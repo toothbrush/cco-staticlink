@@ -233,18 +233,22 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 {
 
 cachevars :: [Ident] -> Syms -> Env -> CodeS
-cachevars is syms env = {- trace (show (freqs is) ++ ", and env=" ++ show (vars env)) -}
-                         (foldr (.) id [getCache i syms | i <- filterNoncache is env])
+cachevars is syms env = trace ("caching=" ++ show cacheVars) cacheCode
+                         where cacheCode = foldr (.) id [getCache i syms | i <- cacheVars ]
+                               cacheVars = filterNoncache is env
 
 filterNoncache :: [Ident] -> Env -> [Ident]
-filterNoncache is e = map fst (filter (localOrOnce e) frequencyTable)
-            where frequencyTable = freqs is
-                  localOrOnce locals (var, freq) | elem var locals = False
-                                                 | otherwise       = True
+filterNoncache is e = map fst (filter (\ x -> notLocal (map fst e) x && usedOften x) (trace (show frequencyTable) frequencyTable))
+            where 
+                  usedOften (i, count) = count > 1
+                  frequencyTable :: [(Ident, Int)]
+                  frequencyTable = freqs is
+                  notLocal :: [Ident] -> (Ident, Int) -> Bool
+                  notLocal locals (var, freq) = not $ elem var locals
 
 -- | build a frequency table
 freqs :: Eq a => [a] -> [(a,Int)]
-freqs l = nub [ (i, instances i l) | i <- l ] 
+freqs l = nub [ (i, instances (i) l) | i <- l ] 
 
 -- | count the occurences of x in a list
 instances _ []  = 0

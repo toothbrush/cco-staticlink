@@ -13,7 +13,6 @@ function main ()
                 x = x + 2;
                 x = x + 3;
                 y = 2;
-                y = y + 8;
             }
             baz();
         }
