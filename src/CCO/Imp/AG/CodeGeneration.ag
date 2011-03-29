@@ -17,6 +17,9 @@ attr Decl Decls Stmt Stmts Exp Exps
   inh labels  :: {[Label]}
   syn labels  :: {[Label]}
   syn tocache :: {[Ident]}
+-- The tocache attribute is a list of variables that a given piece of
+-- code will reference. This is used to determine which variables need
+-- prefetching.
 
 sem Prog  | TopLevelDecls  ds .labels  = [0 ..]
 
@@ -233,12 +236,12 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 {
 
 cachevars :: [Ident] -> Syms -> Env -> CodeS
-cachevars is syms env = trace ("caching=" ++ show cacheVars) cacheCode
-                         where cacheCode = foldr (.) id [getCache i syms | i <- cacheVars ]
+cachevars is syms env = {- trace ("caching=" ++ show cacheVars) -} cacheCode
+                         where cacheCode = foldr (.) id [getCache i syms | i <- map fst cacheVars ]
                                cacheVars = filterNoncache is env
 
-filterNoncache :: [Ident] -> Env -> [Ident]
-filterNoncache is e = map fst (filter (\ x -> notLocal (map fst e) x && usedOften x) (trace (show frequencyTable) frequencyTable))
+filterNoncache :: [Ident] -> Env -> [(Ident, Int)]
+filterNoncache is e = filter (\ x -> notLocal (map fst e) x && usedOften x) frequencyTable
             where 
                   usedOften (i, count) = count > 1
                   frequencyTable :: [(Ident, Int)]
@@ -246,11 +249,13 @@ filterNoncache is e = map fst (filter (\ x -> notLocal (map fst e) x && usedOfte
                   notLocal :: [Ident] -> (Ident, Int) -> Bool
                   notLocal locals (var, freq) = not $ elem var locals
 
--- | build a frequency table
+-- | Build a frequency table of a list. 
 freqs :: Eq a => [a] -> [(a,Int)]
-freqs l = nub [ (i, instances (i) l) | i <- l ] 
+freqs l = nub [ (i, instances i l) | i <- l ] 
 
--- | count the occurences of x in a list
+-- | Count the occurences of x in a list
+-- Used to check if a variable is used at least twice in a method
+-- before caching. 
 instances _ []  = 0
 instances x (y:ys)
 	| x == y    = 1 + (instances x ys)
@@ -265,46 +270,39 @@ enter :: Env -> CodeS
 enter env = foldr (.) id [ldc 0 . annote SP 0 0 "green" (x ++ " (var)") | (x, V _) <- env]
 
 -- | Produces code for exiting a block.
--- TODO modify me to kill cached vars too.
+-- Modified to kill cached vars too.
 exit :: Env -> [Ident] -> CodeS
 exit env cache = ajs (- length (vars env) - length (nub cache))
 
--- | cache the addresses.
+-- | Cache the addresses of global variables by doing a lookup. This won't
+-- be called if the variable is local, so we're safe. 
 getCache :: Ident -> Syms -> CodeS
 getCache x (local : global) = case lookup x (vars local) of
   Nothing         -> ldl (- 2) . getGlobalCache x global
-  Just (V offset) -> ldl (- 2) -- TODO WRONG?? maybe not
+  Just (V offset) -> ldl (- 2)
 
 -- | Produces code for retrieving the value of a variable.
+-- Don't prepend a call to getGlobal with anything, since lookup 
+-- has already been done. 
 get :: Ident -> Syms -> CodeS
 get x (local : global) = case lookup x (vars local) of
   Nothing         -> getGlobal x global
   Just (V offset) -> ldl offset
 
--- from Norm
--- getGlobal' :: Ident -> Syms -> CodeS
--- getGlobal' x [] = error ("unknown variable: " ++ x)
--- getGlobal' x (local : global) = case lookup x (vars local) of
---   Nothing         -> getGlobal' x global
---   Just (V offset) -> ldl (length global + 1) . lda offset
-
-
 -- | Produces code for retrieving the address of a global.
 getGlobalCache :: Ident -> Syms -> CodeS
-                            --  here we assume the variable is local?
 getGlobalCache x []           = error ("unknown variable: " ++ x)
---getGlobalCache x []           = nop -- undefined -- error ("unknown variable: " ++ x)
 getGlobalCache x (env : envs) = case lookup x (vars env) of
   Nothing         -> lda (- 2) . getGlobalCache x envs
-  Just (V offset) -> lda (- 2) -- TODO WRONG?? maybe not. this last step places the addy on the stack
+  Just (V offset) -> lda (- 2)
 
 -- | Produces code for retrieving the value of a global variable.
+-- Modified to use the local cached copy. 
 getGlobal :: Ident -> Syms -> CodeS
 getGlobal x []           = error ("unknown variable: " ++ x)
 getGlobal x (env : envs) = case lookup x (vars env) of
   Nothing         -> getGlobal x envs
   Just (V offset) -> ldl (length envs + 1) . lda offset
-  --Just (V offset) -> ldl offset . lda offset
 
 -- | Produces code for assigning a new value to a variable.
 set :: Ident -> Syms -> CodeS
