@@ -2,7 +2,7 @@ imports
 {
 import CCO.Ssm hiding (Add, Sub, Mul, Div, Eq, Lt, Gt)
 import Prelude hiding (div)
-import Data.List (intersperse)
+import Data.List (intersperse, nub)
 
 import Debug.Trace
 }
@@ -61,6 +61,7 @@ type Env = [(Ident, Sym)]
 -- For a variable, we store its offset relative to the mark pointer; for
 -- a function we store its begin label.
 data Sym = V Int | F Int
+           deriving (Show, Eq)
 
 -- | Restrict environments to a particular type of descriptor.
 vars   env = [entry | entry@(_, V _     ) <- env            ]
@@ -175,17 +176,17 @@ sem Prog | TopLevelDecls  loc.codes = @ds.codes .
                                       enter @ds.env .
                                       call "main" [@ds.env] .
                                       ajs (- 1) .
-                                      exit @ds.env
+                                      exit @ds.env [] -- no cached variables here.
 
 sem Decl | FunDecl  lhs.codes = bra @loc.endLabel .
                                 label @loc.beginLabel .
                                   ldr MP .
                                   ldrr MP SP .
-                                  cachevars @b.tocache .
                                   enterparams @loc.params .
                                   enter @b.env .
+                                  cachevars @b.tocache @lhs.syms .
                                   @b.codes .
-                                  exit @b.env .
+                                  exit @b.env @b.tocache .
                                   ldc 0 .
                                   return_ (@loc.params : @lhs.syms) .
                                 label @loc.endLabel
@@ -205,7 +206,7 @@ sem Stmt | Assign  lhs.codes = @e.codes . set @x @lhs.syms
                                label @loc.fiLabel
          | Block   lhs.codes = enter @b.env .
                                @b.codes .
-                               exit @b.env
+                               exit @b.env @b.tocache
 
 sem Exp | Int     lhs.codes = ldc @n . @annote
         | False_  lhs.codes = ldc 0 . @annote
@@ -231,8 +232,8 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 
 {
 
-cachevars :: [Ident] -> CodeS
-cachevars is = trace (show is) nop
+cachevars :: [Ident] -> Syms -> CodeS
+cachevars is syms = trace (show is ++ show syms) (foldr (.) id [getCache i syms | i <- nub is])
 
 -- | Produces code for annotating parameters.
 enterparams :: Env -> CodeS
@@ -244,34 +245,47 @@ enter env = foldr (.) id [ldc 0 . annote SP 0 0 "green" (x ++ " (var)") | (x, V 
 
 -- | Produces code for exiting a block.
 -- TODO modify me to kill cached vars too.
-exit :: Env -> CodeS
-exit env = ajs (- length (vars env))
+exit :: Env -> [Ident] -> CodeS
+exit env cache = ajs (- length (vars env) - length (nub cache))
+
+-- | cache the addresses.
+getCache :: Ident -> Syms -> CodeS
+getCache x (local : global) = case lookup x (vars local) of
+  Nothing         -> ldl (- 2) . getGlobalCache x global
+  Just (V offset) -> ldl (- 2) -- TODO WRONG?? maybe not
 
 -- | Produces code for retrieving the value of a variable.
 get :: Ident -> Syms -> CodeS
 get x (local : global) = case lookup x (vars local) of
-  Nothing         -> ldl (- 2) . getGlobal x global
+  Nothing         -> getGlobal x global
   Just (V offset) -> ldl offset
+
+-- | Produces code for retrieving the address of a global.
+getGlobalCache :: Ident -> Syms -> CodeS
+getGlobalCache x []           = error ("unknown variable: " ++ x)
+getGlobalCache x (env : envs) = case lookup x (vars env) of
+  Nothing         -> lda (- 2) . getGlobalCache x envs
+  Just (V offset) -> lda (- 2) -- TODO WRONG?? maybe not. this last step places the addy on the stack
 
 -- | Produces code for retrieving the value of a global variable.
 getGlobal :: Ident -> Syms -> CodeS
 getGlobal x []           = error ("unknown variable: " ++ x)
 getGlobal x (env : envs) = case lookup x (vars env) of
-  Nothing         -> lda (- 2) . getGlobal x envs
-  Just (V offset) -> lda offset
+  Nothing         -> getGlobal x envs
+  Just (V offset) -> ldl offset . lda offset . nop
 
 -- | Produces code for assigning a new value to a variable.
 set :: Ident -> Syms -> CodeS
 set x (local : global) = case lookup x (vars local) of
-  Nothing         -> ldl (- 2) . setGlobal x global
+  Nothing         -> setGlobal x global
   Just (V offset) -> stl offset
 
 -- | Produces code for assigning a new value to a global variable.
 setGlobal :: Ident -> Syms -> CodeS
 setGlobal x []           = error ("unknown variable: " ++ x)
 setGlobal x (env : envs) = case lookup x (vars env) of
-  Nothing         -> lda (- 2) . setGlobal x envs
-  Just (V offset) -> sta offset
+  Nothing         -> setGlobal x envs
+  Just (V offset) -> ldl offset . sta offset . nop
 
 -- | Produces code for calling a function.
 call :: Ident -> Syms -> CodeS
