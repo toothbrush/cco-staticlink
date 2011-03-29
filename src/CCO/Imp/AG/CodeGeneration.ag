@@ -141,10 +141,20 @@ sem Exp | Int     lhs.tocache = []
         | False_  lhs.tocache = []
         | True_   lhs.tocache = []
         | Var     lhs.tocache = [@x]
+        | Call    lhs.tocache = @es.tocache
+        | Add     lhs.tocache = @e1.tocache ++ @e2.tocache
+        | Sub     lhs.tocache = @e1.tocache ++ @e2.tocache
+        | Mul     lhs.tocache = @e1.tocache ++ @e2.tocache
+        | Div     lhs.tocache = @e1.tocache ++ @e2.tocache
+        | Lt      lhs.tocache = @e1.tocache ++ @e2.tocache
+        | Gt      lhs.tocache = @e1.tocache ++ @e2.tocache
+        | Eq      lhs.tocache = @e1.tocache ++ @e2.tocache
+        
 
 sem Exps | Nil    lhs.anns = []
                   lhs.tocache = []
          | Cons   lhs.anns = @hd.ann : @tl.anns
+                  lhs.tocache = @hd.tocache ++ @tl.tocache
 
 sem Exp | *       loc.annote = annote SP 0 0 "green" @ann
 
