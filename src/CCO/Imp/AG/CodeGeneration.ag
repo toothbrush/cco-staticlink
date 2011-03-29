@@ -16,7 +16,15 @@ import Debug.Trace
 attr Decl Decls Stmt Stmts Exp Exps
   inh labels  :: {[Label]}
   syn labels  :: {[Label]}
-  syn tocache :: {[Ident]}
+  syn tocache :: {[(Ident,Distance)]}
+
+{
+-- | Distance stores 'how far away' the current scope is 
+-- from where a variable was needed. Useful to prevent caching
+-- variables which are only one scope away, as that doesn't
+-- save any instructions.
+type Distance = Int
+}
 -- The tocache attribute is a list of variables that a given piece of
 -- code will reference. This is used to determine which variables need
 -- prefetching.
@@ -26,7 +34,9 @@ sem Prog  | TopLevelDecls  ds .labels  = [0 ..]
 sem Decl  | FunDecl        loc.beginLabel = @lhs.labels !! 0
                            loc.endLabel   = @lhs.labels !! 1
                            b  .labels     = drop 2 @lhs.labels
-                           lhs.tocache    = @b.tocache
+                    -- MAYBE TODO don't cache here: this could prevent 'parent' functions from also 
+                    -- having the prefetch code 
+                           lhs.tocache    = map (\(x,d) -> (x,d+1)) @b.tocache
           | VarDecl        lhs.tocache    = []
 
 sem Decls | Nil            lhs.tocache    = []
@@ -116,8 +126,8 @@ sem Stmt | Block          b .syms = let local : global = @lhs.syms
 
 sem Stmt | Empty  lhs.tocache = []
          -- never called:
-         | Block  lhs.tocache = @b.tocache -- let local : global = @lhs.tocache
-         | Assign lhs.tocache = @x : @e.tocache
+         | Block  lhs.tocache = map (\(x,d) -> (x, d+1)) @b.tocache
+         | Assign lhs.tocache = (@x,0) : @e.tocache
          | Print  lhs.tocache = @e.tocache
          | Return lhs.tocache = @e.tocache
                                
@@ -147,7 +157,7 @@ sem Exp | Int     loc.ann = show @n
 sem Exp | Int     lhs.tocache = []
         | False_  lhs.tocache = []
         | True_   lhs.tocache = []
-        | Var     lhs.tocache = [@x]
+        | Var     lhs.tocache = [(@x,0)]
         | Call    lhs.tocache = @es.tocache
         | Add     lhs.tocache = @e1.tocache ++ @e2.tocache
         | Sub     lhs.tocache = @e1.tocache ++ @e2.tocache
@@ -235,17 +245,16 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 
 {
 
-cachevars :: [Ident] -> Syms -> Env -> CodeS
-cachevars is syms env = {- trace ("caching=" ++ show cacheVars) -} cacheCode
-                         where cacheCode = foldr (.) id [getCache i syms | i <- map fst cacheVars ]
-                               cacheVars = filterNoncache is env
+cachevars :: [(Ident,Distance)] -> Syms -> Env -> CodeS
+cachevars is syms env =  trace ("caching=" ++ show (filterNoncache is env))  cacheCode
+                         where cacheCode = foldr (.) id [getCache i syms | i <- map fst (filterNoncache is env) ]
 
-filterNoncache :: [Ident] -> Env -> [(Ident, Int)]
+filterNoncache :: [(Ident,Distance)] -> Env -> [(Ident, Int)]
 filterNoncache is e = filter (\ x -> notLocal (map fst e) x && usedOften x) frequencyTable
             where 
                   usedOften (i, count) = count > 1
                   frequencyTable :: [(Ident, Int)]
-                  frequencyTable = freqs is
+                  frequencyTable = freqs (map fst is)
                   notLocal :: [Ident] -> (Ident, Int) -> Bool
                   notLocal locals (var, freq) = not $ elem var locals
 
@@ -271,8 +280,8 @@ enter env = foldr (.) id [ldc 0 . annote SP 0 0 "green" (x ++ " (var)") | (x, V 
 
 -- | Produces code for exiting a block.
 -- Modified to kill cached vars too.
-exit :: Env -> [Ident] -> CodeS
-exit env cache = ajs (- length (vars env) - length (nub cache))
+exit :: Env -> [(Ident,Distance)] -> CodeS
+exit env cache = ajs (- length (vars env) - length (filterNoncache cache env))
 
 -- | Cache the addresses of global variables by doing a lookup. This won't
 -- be called if the variable is local, so we're safe. 
