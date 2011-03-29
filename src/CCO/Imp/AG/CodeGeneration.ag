@@ -110,9 +110,12 @@ sem Decl | FunDecl        b .syms = (@loc.params ++ @b.env) : @lhs.syms
 sem Stmt | Block          b .syms = let local : global = @lhs.syms
                                     in  (local ++ @b.env) : global
 
-sem Stmt | Empty lhs.tocache = []
+sem Stmt | Empty  lhs.tocache = []
          -- never called:
-         | Block lhs.tocache = undefined -- let local : global = @lhs.tocache
+         | Block  lhs.tocache = @b.tocache -- let local : global = @lhs.tocache
+         | Assign lhs.tocache = @x : @e.tocache
+         | Print  lhs.tocache = @e.tocache
+         | Return lhs.tocache = @e.tocache
                                
 
 -------------------------------------------------------------------------------
