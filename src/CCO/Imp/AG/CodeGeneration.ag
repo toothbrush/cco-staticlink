@@ -2,7 +2,7 @@ imports
 {
 import CCO.Ssm hiding (Add, Sub, Mul, Div, Eq, Lt, Gt)
 import Prelude hiding (div)
-import Data.List (intersperse, nub)
+import Data.List (intersperse, nub, (\\))
 
 import Debug.Trace
 }
@@ -184,7 +184,7 @@ sem Decl | FunDecl  lhs.codes = bra @loc.endLabel .
                                   ldrr MP SP .
                                   enterparams @loc.params .
                                   enter @b.env .
-                                  cachevars @b.tocache @lhs.syms .
+                                  cachevars @b.tocache @lhs.syms @b.env .
                                   @b.codes .
                                   exit @b.env @b.tocache .
                                   ldc 0 .
@@ -232,8 +232,8 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 
 {
 
-cachevars :: [Ident] -> Syms -> CodeS
-cachevars is syms = trace (show is ++ show syms) (foldr (.) id [getCache i syms | i <- nub is])
+cachevars :: [Ident] -> Syms -> Env -> CodeS
+cachevars is syms env = trace (show is ++ ", and env=" ++ show (vars env)) (foldr (.) id [getCache i syms | i <- (nub is)\\(map fst (vars env))])
 
 -- | Produces code for annotating parameters.
 enterparams :: Env -> CodeS
@@ -260,10 +260,19 @@ get x (local : global) = case lookup x (vars local) of
   Nothing         -> getGlobal x global
   Just (V offset) -> ldl offset
 
+-- from Norm
+-- getGlobal' :: Ident -> Syms -> CodeS
+-- getGlobal' x [] = error ("unknown variable: " ++ x)
+-- getGlobal' x (local : global) = case lookup x (vars local) of
+--   Nothing         -> getGlobal' x global
+--   Just (V offset) -> ldl (length global + 1) . lda offset
+
+
 -- | Produces code for retrieving the address of a global.
 getGlobalCache :: Ident -> Syms -> CodeS
                             --  here we assume the variable is local?
-getGlobalCache x []           = nop -- undefined -- error ("unknown variable: " ++ x)
+getGlobalCache x []           = error ("unknown variable: " ++ x)
+--getGlobalCache x []           = nop -- undefined -- error ("unknown variable: " ++ x)
 getGlobalCache x (env : envs) = case lookup x (vars env) of
   Nothing         -> lda (- 2) . getGlobalCache x envs
   Just (V offset) -> lda (- 2) -- TODO WRONG?? maybe not. this last step places the addy on the stack
@@ -273,7 +282,8 @@ getGlobal :: Ident -> Syms -> CodeS
 getGlobal x []           = error ("unknown variable: " ++ x)
 getGlobal x (env : envs) = case lookup x (vars env) of
   Nothing         -> getGlobal x envs
-  Just (V offset) -> ldl offset . lda offset
+  Just (V offset) -> ldl (length envs + 1) . lda offset
+  --Just (V offset) -> ldl offset . lda offset
 
 -- | Produces code for assigning a new value to a variable.
 set :: Ident -> Syms -> CodeS
