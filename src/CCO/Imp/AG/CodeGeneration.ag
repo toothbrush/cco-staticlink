@@ -233,7 +233,14 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 {
 
 cachevars :: [Ident] -> Syms -> Env -> CodeS
-cachevars is syms env = trace (show (freqs is) ++ ", and env=" ++ show (vars env)) (foldr (.) id [getCache i syms | i <- (nub is)\\(map fst (vars env))])
+cachevars is syms env = {- trace (show (freqs is) ++ ", and env=" ++ show (vars env)) -}
+                         (foldr (.) id [getCache i syms | i <- filterNoncache is env])
+
+filterNoncache :: [Ident] -> Env -> [Ident]
+filterNoncache is e = map fst (filter (localOrOnce e) frequencyTable)
+            where frequencyTable = freqs is
+                  localOrOnce locals (var, freq) | elem var locals = False
+                                                 | otherwise       = True
 
 -- | build a frequency table
 freqs :: Eq a => [a] -> [(a,Int)]
