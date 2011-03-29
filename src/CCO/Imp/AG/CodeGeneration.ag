@@ -3,6 +3,8 @@ imports
 import CCO.Ssm hiding (Add, Sub, Mul, Div, Eq, Lt, Gt)
 import Prelude hiding (div)
 import Data.List (intersperse)
+
+import Debug.Trace
 }
 
 -------------------------------------------------------------------------------
@@ -12,18 +14,24 @@ import Data.List (intersperse)
 -- Handing out fresh program-point labels where necessary.
 
 attr Decl Decls Stmt Stmts Exp Exps
-  inh labels :: {[Label]}
-  syn labels :: {[Label]}
+  inh labels  :: {[Label]}
+  syn labels  :: {[Label]}
+  syn tocache :: {[Ident]}
 
-sem Prog | TopLevelDecls  ds .labels = [0 ..]
+sem Prog  | TopLevelDecls  ds .labels  = [0 ..]
 
-sem Decl | FunDecl        loc.beginLabel = @lhs.labels !! 0
-                          loc.endLabel   = @lhs.labels !! 1
-                          b  .labels     = drop 2 @lhs.labels
+sem Decl  | FunDecl        loc.beginLabel = @lhs.labels !! 0
+                           loc.endLabel   = @lhs.labels !! 1
+                           b  .labels     = drop 2 @lhs.labels
+                           lhs.tocache    = @b.tocache
+          | VarDecl        lhs.tocache    = []
 
-sem Stmt | If             loc.elseLabel  = @lhs.labels !! 0
-                          loc.fiLabel    = @lhs.labels !! 1
-                          e  .labels     = drop 2 @lhs.labels
+sem Decls | Nil            lhs.tocache    = []
+
+sem Stmt  | If             loc.elseLabel  = @lhs.labels !! 0
+                           loc.fiLabel    = @lhs.labels !! 1
+                           e  .labels     = drop 2 @lhs.labels
+                           lhs.tocache    = @s1.tocache ++ @s2.tocache
 
 -------------------------------------------------------------------------------
 -- Offsets
@@ -69,7 +77,7 @@ attr Decl Decls Stmt Stmts
 sem Decl | VarDecl  lhs.env = [(@x, V @lhs.offset    )]
          | FunDecl  lhs.env = [(@f, F @loc.beginLabel)]
 
-sem Stmt | Block  lhs.env = []
+sem Stmt | Block    lhs.env = []
 
 -- Furthermore, we construct a subenvironment for the parameters of a function.
 
@@ -102,6 +110,11 @@ sem Decl | FunDecl        b .syms = (@loc.params ++ @b.env) : @lhs.syms
 sem Stmt | Block          b .syms = let local : global = @lhs.syms
                                     in  (local ++ @b.env) : global
 
+sem Stmt | Empty lhs.tocache = []
+         -- never called:
+         | Block lhs.tocache = undefined -- let local : global = @lhs.tocache
+                               
+
 -------------------------------------------------------------------------------
 -- Minimal pretty printing of Exp for use in SSM annotations
 -------------------------------------------------------------------------------
@@ -124,10 +137,19 @@ sem Exp | Int     loc.ann = show @n
         | Eq      loc.ann = @e1.ann ++ "==" ++ @e2.ann
         | Gt      loc.ann = @e1.ann ++ ">"  ++ @e2.ann
 
+sem Exp | Int     lhs.tocache = []
+        | False_  lhs.tocache = []
+        | True_   lhs.tocache = []
+        | Var     lhs.tocache = [@x]
+
 sem Exps | Nil    lhs.anns = []
+                  lhs.tocache = []
          | Cons   lhs.anns = @hd.ann : @tl.anns
 
 sem Exp | *       loc.annote = annote SP 0 0 "green" @ann
+
+sem Stmts | Nil lhs.tocache = []
+          | Cons lhs.tocache = @hd.tocache ++ @tl.tocache
 
 -------------------------------------------------------------------------------
 -- Code generation
@@ -146,6 +168,7 @@ sem Decl | FunDecl  lhs.codes = bra @loc.endLabel .
                                 label @loc.beginLabel .
                                   ldr MP .
                                   ldrr MP SP .
+                                  cachevars @b.tocache .
                                   enterparams @loc.params .
                                   enter @b.env .
                                   @b.codes .
@@ -194,6 +217,10 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 -------------------------------------------------------------------------------
 
 {
+
+cachevars :: [Ident] -> CodeS
+cachevars is = trace (show is) nop
+
 -- | Produces code for annotating parameters.
 enterparams :: Env -> CodeS
 enterparams env = foldr (.) id [annote MP off off "green" (x ++ " (param)") | (x, V off) <- env]
@@ -203,6 +230,7 @@ enter :: Env -> CodeS
 enter env = foldr (.) id [ldc 0 . annote SP 0 0 "green" (x ++ " (var)") | (x, V _) <- env]
 
 -- | Produces code for exiting a block.
+-- TODO modify me to kill cached vars too.
 exit :: Env -> CodeS
 exit env = ajs (- length (vars env))
 
