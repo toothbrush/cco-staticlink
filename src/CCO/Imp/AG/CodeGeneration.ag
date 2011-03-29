@@ -262,7 +262,8 @@ get x (local : global) = case lookup x (vars local) of
 
 -- | Produces code for retrieving the address of a global.
 getGlobalCache :: Ident -> Syms -> CodeS
-getGlobalCache x []           = error ("unknown variable: " ++ x)
+                            --  here we assume the variable is local?
+getGlobalCache x []           = nop -- undefined -- error ("unknown variable: " ++ x)
 getGlobalCache x (env : envs) = case lookup x (vars env) of
   Nothing         -> lda (- 2) . getGlobalCache x envs
   Just (V offset) -> lda (- 2) -- TODO WRONG?? maybe not. this last step places the addy on the stack
@@ -272,7 +273,7 @@ getGlobal :: Ident -> Syms -> CodeS
 getGlobal x []           = error ("unknown variable: " ++ x)
 getGlobal x (env : envs) = case lookup x (vars env) of
   Nothing         -> getGlobal x envs
-  Just (V offset) -> ldl offset . lda offset . nop
+  Just (V offset) -> ldl offset . lda offset
 
 -- | Produces code for assigning a new value to a variable.
 set :: Ident -> Syms -> CodeS
@@ -285,7 +286,7 @@ setGlobal :: Ident -> Syms -> CodeS
 setGlobal x []           = error ("unknown variable: " ++ x)
 setGlobal x (env : envs) = case lookup x (vars env) of
   Nothing         -> setGlobal x envs
-  Just (V offset) -> ldl offset . sta offset . nop
+  Just (V offset) -> ldl offset . sta offset
 
 -- | Produces code for calling a function.
 call :: Ident -> Syms -> CodeS
