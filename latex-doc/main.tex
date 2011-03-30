@@ -11,7 +11,25 @@
 
 \section{Introduction}
 
-Test
+This assignment was about static link optimisation. This is referring to the process of compiling a C-like language with support for function nesting, into the Assembler-like SSM (Simple Stack Machine) language, which is a simulator. 
+The naive and initial implementation was that whenever a variable needed to be read or written, each enclosing context was looked at in turn, leading to an $O(n)$ operation each time, with $n$ being
+the nesting level of the particular statement, counted from the outer, or global, scope. This of course becomes particularly bad when a global variable is often used inside a deeply nested function, leading to many lookups, while the eventual address never changes.
+
+The way to improve this would be to see if a variable is used ``often'' (in our case, more than once will lead to savings), and precompute the global address once in that function, so each access only requires reading the cached address, then the variable itself (2 operations), which is $O(1)$ as opposed to the previous complexity, which was linear in the nesting depth of the statement. 
+
+\section{Approach}
+
+The provided compiler, without optimisation, was written in the UUAGC (Utrecht Univesity Attribute Grammar) language, which allows for easy transformation of tree-like structures. The source of the input file is parsed into a tree data structure, and 
+then converted into SSM. 
+
+The approach taken in this solution was to add an extra synthesized attribute reflecting which variables are used. Starting from assignments and accesses of variables, this is aggregated until we know at each level which variables will be needed. This can then
+be passed to a function which is called whenever a function body opens, which generates the caching code. This caching code is very similar to the code for reading or writing a global variable, in that it has a chain of lookups into ever broader scope, but doesn't
+do the final read or write, but pushes the address of the start of the scope in which the variable is declared, onto the stack. This allows subsequent use of the variables to simply look at their MP (mark pointer, pointing to the beginning of the current function on 
+the stack) to obtain the cached pointer to the block where the requested variable was declared. 
+
+\section{Implemented}
+
+
 
 
 \end{document}
