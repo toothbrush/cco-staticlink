@@ -36,7 +36,9 @@ sem Decl  | FunDecl        loc.beginLabel = @lhs.labels !! 0
                            b  .labels     = drop 2 @lhs.labels
                     -- MAYBE TODO don't cache here: this could prevent 'parent' functions from also 
                     -- having the prefetch code 
-                           lhs.tocache    = map (\(x,d) -> (x,d+1)) @b.tocache
+                    -- ... but now using a variable which needs to unroll address
+                    -- doesn't work. a check must be done on get/set
+                           lhs.tocache    = [] -- map (\(x,d) -> (x,d+1)) @b.tocache
           | VarDecl        lhs.tocache    = []
 
 sem Decls | Nil            lhs.tocache    = []
