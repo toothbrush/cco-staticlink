@@ -29,7 +29,7 @@ $ make
 and optionally 
 
 $ cabal install # this is so you can run the commands directly, 
-                # without invocations like `dist/build/parse-tdiag/parse-tdiag`. 
+                # without invocations like `dist/build/impc/impc`.
 
 For built-in documentation:
 
