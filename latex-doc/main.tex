@@ -29,7 +29,19 @@ the stack) to obtain the cached pointer to the block where the requested variabl
 
 \section{Implemented}
 
+The suggestions in the assignment were as follows:
 
+\begin{enumerate}
+    \item First, extend the code generator so that, for each function body, pre- traversals are performed for all surrounding lexial levels, without paying attention to whether the obtained end points are actually needed from within the body.
+    \item Next, further adapt the generator so that the pretraversal for the closest surrounding lexical level is not cached. As mentioned, this end point of this traversal is already available at offset −2.
+    \item Then, make sure that from the remaining end points only the ones that are are guaranteed to be used from within the function body are precomputed.
+    \item Finally, exclude from precomputation those end points that are used only once from within the function body, for there is nothing to gain from caching these. (Even worse, the extra indirection would only make ad- dressing relative to these end points more expensive.)
+\end{enumerate}
+
+So far, item 1 is done. This was accomplished as described above. For item 2 the idea is to add a `distance' to the attribute \texttt{tocache}, which is incremented every time we pop a lexical level. We could then do a check that we only cache variables where this 
+value is greater than 1. Items 3 and 4 are accomplished in one go in this solution, as we have in the attribute \texttt{tocache} a field which reflects how often a variable is used. If this is more than 1, we know that the variable should be cached. 
+
+The next step to get 3 and 4 working are to modify get and set to know if they should return the code for a cached or non-cached variable. 
 
 
 \end{document}
