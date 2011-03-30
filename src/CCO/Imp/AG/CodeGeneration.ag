@@ -38,7 +38,8 @@ sem Decl  | FunDecl        loc.beginLabel = @lhs.labels !! 0
                     -- having the prefetch code 
                     -- ... but now using a variable which needs to unroll address
                     -- doesn't work. a check must be done on get/set
-                           lhs.tocache    = [] -- map (\(x,d) -> (x,d+1)) @b.tocache
+                           lhs.tocache    = map (\(x,d) -> (x,d+1)) @b.tocache
+                           --lhs.tocache    = [] -- map (\(x,d) -> (x,d+1)) @b.tocache
           | VarDecl        lhs.tocache    = []
 
 sem Decls | Nil            lhs.tocache    = []
@@ -254,11 +255,12 @@ cachevars is syms env =  trace ("caching=" ++ show (filterNoncache is env))  cac
 filterNoncache :: [(Ident,Distance)] -> Env -> [(Ident, Int)]
 filterNoncache is e = filter (\ x -> notLocal (map fst e) x && usedOften x) frequencyTable
             where 
-                  usedOften (i, count) = count > 1
+                  usedOften :: (Ident, Int) -> Bool
+                  usedOften (_, count) = count > 1
                   frequencyTable :: [(Ident, Int)]
                   frequencyTable = freqs (map fst is)
                   notLocal :: [Ident] -> (Ident, Int) -> Bool
-                  notLocal locals (var, freq) = not $ elem var locals
+                  notLocal locals (var, _) = not $ elem var locals
 
 -- | Build a frequency table of a list. 
 freqs :: Eq a => [a] -> [(a,Int)]
