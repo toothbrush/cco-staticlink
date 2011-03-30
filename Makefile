@@ -6,6 +6,11 @@ AG						:= src/CCO/Imp/AG.ag src/CCO/Imp/AG/Base.ag src/CCO/Imp/AG/CodeGeneratio
 
 all : haskell
 
+documentation: 
+	cabal configure
+	cabal haddock
+	cd latex-doc; pdflatex main
+
 src/CCO/Imp/AG.hs : $(AG)
 	uuagc -Hdcfws --self -P src/CCO/Imp src/CCO/Imp/AG.ag
 
@@ -16,4 +21,4 @@ haskell : src/CCO/Imp/AG.hs
 dist:
 	tar tfz imp-$(VERSION).tar.gz $(AG)
 
-.PHONY : haskell dist
+.PHONY : haskell dist documentation
