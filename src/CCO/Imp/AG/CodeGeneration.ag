@@ -18,6 +18,9 @@ attr Decl Decls Stmt Stmts Exp Exps
   syn labels  :: {[Label]}
   syn tocache :: {[(Ident,Distance)]}
 
+attr Stmt Stmts Exp Exps
+  inh numberCached :: {Int}
+
 {
 -- | Distance stores 'how far away' the current scope is 
 -- from where a variable was needed. Useful to prevent caching
@@ -34,12 +37,9 @@ sem Prog  | TopLevelDecls  ds .labels  = [0 ..]
 sem Decl  | FunDecl        loc.beginLabel = @lhs.labels !! 0
                            loc.endLabel   = @lhs.labels !! 1
                            b  .labels     = drop 2 @lhs.labels
-                    -- MAYBE TODO don't cache here: this could prevent 'parent' functions from also 
-                    -- having the prefetch code 
-                    -- ... but now using a variable which needs to unroll address
-                    -- doesn't work. a check must be done on get/set
-                           lhs.tocache    = map (\(x,d) -> (x,d+1)) @b.tocache
-                           --lhs.tocache    = [] -- map (\(x,d) -> (x,d+1)) @b.tocache
+                           lhs.tocache    = []
+                           loc.cached     = filterNoncache @b.tocache @b.env
+                           b.numberCached = trace ("nrcache = " ++ show (length @loc.cached)) (length @loc.cached)
           | VarDecl        lhs.tocache    = []
 
 sem Decls | Nil            lhs.tocache    = []
@@ -128,7 +128,6 @@ sem Stmt | Block          b .syms = let local : global = @lhs.syms
                                     in  (local ++ @b.env) : global
 
 sem Stmt | Empty  lhs.tocache = []
-         -- never called:
          | Block  lhs.tocache = map (\(x,d) -> (x, d+1)) @b.tocache
          | Assign lhs.tocache = (@x,0) : @e.tocache
          | Print  lhs.tocache = @e.tocache
@@ -176,10 +175,10 @@ sem Exps | Nil    lhs.anns = []
          | Cons   lhs.anns = @hd.ann : @tl.anns
                   lhs.tocache = @hd.tocache ++ @tl.tocache
 
-sem Exp | *       loc.annote = annote SP 0 0 "green" @ann
+sem Exp  | *      loc.annote = annote SP 0 0 "green" @ann
 
-sem Stmts | Nil lhs.tocache = []
-          | Cons lhs.tocache = @hd.tocache ++ @tl.tocache
+sem Stmts | Nil   lhs.tocache = []
+          | Cons  lhs.tocache = @hd.tocache ++ @tl.tocache
 
 -------------------------------------------------------------------------------
 -- Code generation
@@ -192,7 +191,7 @@ sem Prog | TopLevelDecls  loc.codes = @ds.codes .
                                       enter @ds.env .
                                       call "main" [@ds.env] .
                                       ajs (- 1) .
-                                      exit @ds.env [] -- no cached variables here.
+                                      exit @ds.env
 
 sem Decl | FunDecl  lhs.codes = bra @loc.endLabel .
                                 label @loc.beginLabel .
@@ -200,11 +199,11 @@ sem Decl | FunDecl  lhs.codes = bra @loc.endLabel .
                                   ldrr MP SP .
                                   enterparams @loc.params .
                                   enter @b.env .
-                                  cachevars @b.tocache @lhs.syms @b.env .
+                                  cachevars @loc.cached @lhs.syms @b.env .
                                   @b.codes .
-                                  exit @b.env @b.tocache .
+                                  exit @b.env .
                                   ldc 0 .
-                                  return_ (@loc.params : @lhs.syms) .
+                                  return_ (@loc.params : @lhs.syms) 0 .
                                 label @loc.endLabel
 
 sem Stmt | Assign  lhs.codes = @e.codes . set @x @lhs.syms
@@ -212,7 +211,7 @@ sem Stmt | Assign  lhs.codes = @e.codes . set @x @lhs.syms
                                call @f @lhs.syms .
                                ajs (- 1)
          | Print   lhs.codes = @e.codes . trap 0
-         | Return  lhs.codes = @e.codes . return_ @lhs.syms
+         | Return  lhs.codes = @e.codes . return_ @lhs.syms @lhs.numberCached
          | If      lhs.codes = @e.codes .
                                brf @loc.elseLabel .
                                @s1.codes .
@@ -222,7 +221,7 @@ sem Stmt | Assign  lhs.codes = @e.codes . set @x @lhs.syms
                                label @loc.fiLabel
          | Block   lhs.codes = enter @b.env .
                                @b.codes .
-                               exit @b.env @b.tocache
+                               exit @b.env
 
 sem Exp | Int     lhs.codes = ldc @n . @annote
         | False_  lhs.codes = ldc 0 . @annote
@@ -249,11 +248,11 @@ sem Prog | TopLevelDecls  lhs.code = Code (@loc.codes [])
 {
 
 cachevars :: [(Ident,Distance)] -> Syms -> Env -> CodeS
-cachevars is syms env =  trace ("caching=" ++ show (filterNoncache is env))  cacheCode
-                         where cacheCode = foldr (.) id [getCache i syms | i <- map fst (filterNoncache is env) ]
+cachevars is syms env =  trace ("caching=" ++ show (is))  cacheCode
+                         where cacheCode = foldr (.) id [getCache i syms | i <- map fst (is) ]
 
 filterNoncache :: [(Ident,Distance)] -> Env -> [(Ident, Int)]
-filterNoncache is e = filter (\ x -> notLocal (map fst e) x && usedOften x) frequencyTable
+filterNoncache is e = filter (\ x -> notLocal (map fst e) x {- && usedOften x -}) frequencyTable
             where 
                   usedOften :: (Ident, Int) -> Bool
                   usedOften (_, count) = count > 1
@@ -284,8 +283,8 @@ enter env = foldr (.) id [ldc 0 . annote SP 0 0 "green" (x ++ " (var)") | (x, V 
 
 -- | Produces code for exiting a block.
 -- Modified to kill cached vars too.
-exit :: Env -> [(Ident,Distance)] -> CodeS
-exit env cache = ajs (- length (vars env) - length (filterNoncache cache env))
+exit :: Env -> CodeS
+exit env = ajs (- length (vars env))
 
 -- | Cache the addresses of global variables by doing a lookup. This won't
 -- be called if the variable is local, so we're safe. 
@@ -344,12 +343,12 @@ callGlobal f (env : envs) = case lookup f (funs env) of
   Just (F beginLabel) -> ldcL beginLabel . jsr
 
 -- | Produces code for returning from a function.
-return_ :: Syms -> CodeS
-return_ (local : _) =
+return_ :: Syms -> Int -> CodeS
+return_ (local : _) nrCached =
   sts (- (length (vars local) + 3)) .
   ldrr SP MP .
   str MP .
-  sts (- length (params local)) .
+  sts (- length (params local) - nrCached) .
   ajs (- (length (params local) - 1)) .
   ret
 }
