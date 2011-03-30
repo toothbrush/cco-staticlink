@@ -1,0 +1,100 @@
+README file for the 3rd assignment of Compiler Construction
+
+Static link optimisation
+
+30 March, 2011
+
+Author: Paul van der Walt (3120805)
+
+------------------------------------------------------------------------------------------
+
+FOR THE RUSHED
+
+$ tar xvvzf staticlink.tar.gz
+$ cd staticlink/
+$ make
+$ cat test/exampleX | impc > test/exampleX.ssm
+
+Run resulting file with SSM. 
+
+------------------------------------------------------------------------------------------
+
+FOR THE IMPATIENT
+
+To get started, unpack this tarball (evidently this was successful if you're reading
+this), and run:
+
+$ make
+
+and optionally 
+
+$ cabal install # this is so you can run the commands directly, 
+                # without invocations like `dist/build/parse-tdiag/parse-tdiag`. 
+
+For built-in documentation:
+
+$ cabal haddock
+
+Documentation gets placed in dist/doc/html/imp/index.html (this is a good starting
+point). To try out the various examples, assuming you have run `cabal install`, try 
+the following:
+
+$ cat test/exampleX | impc > test/exampleX.ssm
+
+or if you'd rather not install:
+
+$ cat test/exampleX | dist/build/impc/impc > test/exampleX.ssm
+
+and open the generated file, test/exampleX.ssm, in a text editor, or, optionally, simulate with SSM.
+
+-------------------------------------------------------------------------------------------
+
+EXAMPLES
+
+A number of examples are included, see ./test/example?, the specifics of each examle
+will be explained in an accompanying file named <filename>.txt.
+
+-------------------------------------------------------------------------------------------
+
+FOR THE PATIENT (or the more curious)
+
+Features
+
+This is unfortunately not a complete implementation of the optimisation as suggested by
+the assignment, due to unforseen complexity. The main features are, however:
+
+* Caching of variables for each scope, except:
+  - those used only once,
+  - those that aren't used.
+
+Improvements for a next version:
+
+* Don't cache variables only 1 lexical level away, as this doesn't decrease
+  the number of needed instructions. 
+* Reuse caching information from previous lexical levels.
+
+Requirements:
+
+This package has been tested on Mac OS X.6 and Linux 2.6.35, using GHC6.12.3 and GHC7.0.1.
+Also required are at least the following packages (can be obtained via the Haskell Cabal):
+
+- cco
+- uuagc
+
+Documentation:
+
+For some documentation, we refer the reader to the Haddock generated documentation. 
+This can be obtained by running
+
+$ cabal haddock
+
+and opening the resulting file, dist/doc/html/imp/index.html. This file includes
+an introduction as well as links to the rest of the documentation. 
+
+The actual documentation is included as a PDF file, main.pdf. Here the design is 
+documented, as well as why certain features aren't implemented. 
+
+It can be generated from source by running:
+
+$ cd latex-doc/
+$ pdflatex main
